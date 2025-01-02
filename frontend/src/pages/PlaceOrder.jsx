@@ -24,6 +24,19 @@ const PlaceOrder = () => {
     phone:''
   }) 
 
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    
+    script.onerror = () => console.error('Failed to load Razorpay script');
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script); 
+    };
+  }, []);
+
   const onChangeHandler = (event) =>{
     const name = event.target.name;
     const value = event.target.value;
@@ -32,24 +45,50 @@ const PlaceOrder = () => {
   }
 
   const initPay = (order) =>{
+    if (!window.Razorpay) {
+      console.error('Razorpay not loaded');
+      return;
+    } 
+
     const options ={
       key:import.meta.env.VITE_RAZORPAY_KEY_ID,
       amount:order.amount,
       currency:order.currency,
       name:'Order Payment',
       description:'Order Payment',
-      order_id:order._id,
+      order_id:order.id,
       receipt:order.receipt,
-      handler:async(response)=>{
-        console.log(response)
-        try {
-          const {data} = await axios.post(backendUrl + '/api/orders/verifyRazorpay',response,{headers:{token}})
-          if (data.success) {
-            navigate('/orders')
-            setCartItems({})
+      handler: async (response)=>{
+        
+        const orderId = response.razorpay_order_id; 
+          const paymentId = response.razorpay_payment_id;
+
+          if (!orderId || !paymentId) {
+            toast.error("Missing Razorpay order ID or payment ID");
+            return;
           }
+
+        try {
+
+          const {data} = await axios.post(backendUrl + '/api/orders/verifyRazorpay',{
+            razorpay_order_id: orderId,
+            razorpay_payment_id: paymentId,
+
+          },{headers:{token}});
+
+          console.log('Backend response:', data);
+
+          if (data.success) {
+           
+
+            setCartItems({});
+            navigate('/orders');
+            
+          }else {
+            toast.error(data.message || "Payment verification failed.");
+    }
         } catch (error) {
-          console.log(error)
+          console.error("Error verifying Razorpay payment:", data.message);
           toast.error(error)
         }
       }
@@ -121,6 +160,7 @@ const PlaceOrder = () => {
               initPay(responseRazorpay.data.order);
             }
             break;
+
          default:
             break;
       }

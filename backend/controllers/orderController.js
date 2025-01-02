@@ -130,7 +130,9 @@ const verifyStripe = async (req,res) => {
 const placeOrderRazorpay = async (req,res) => {
     try {
         
-        const { userId, items, amount, address} = req.body
+        const { userId, items, amount, address} = req.body;
+
+        const currency = "INR";
 
         const orderData = {
             userId,
@@ -142,8 +144,8 @@ const placeOrderRazorpay = async (req,res) => {
             date: Date.now()
         }
 
-        const newOrder = new orderModel(orderData)
-        await newOrder.save()
+        const newOrder = new orderModel(orderData);
+        await newOrder.save();
 
         const options = {
             amount: amount * 100,
@@ -168,13 +170,35 @@ const placeOrderRazorpay = async (req,res) => {
 const verifyRazorpay = async (req,res) => {
     try {
         
-        const { userId, razorpay_order_id  } = req.body
+        const { userId, razorpay_order_id, razorpay_payment_id  } = req.body;
 
-        const orderInfo = await razorpayInstance.orders.fetch(razorpay_order_id)
+        if (!razorpay_order_id || !razorpay_payment_id) {
+            return res.json({ success: false, message: "'order_id' and 'payment_id' are mandatory" });
+          }
+        
+        console.log('Verifying payment for order ID:', razorpay_order_id);
+
+        const orderInfo = await razorpayInstance.orders.fetch(razorpay_order_id);
+
+        
+
         if (orderInfo.status === 'paid') {
+            console.log('Payment verified successfully for order:', razorpay_order_id);
+
+            
+
+            const paymentInfo = await razorpayInstance.payments.fetch(razorpay_payment_id);
+
+            if (paymentInfo.status === 'captured') {
+                console.log('Payment verified successfully for order:', razorpay_order_id);
+
             await orderModel.findByIdAndUpdate(orderInfo.receipt,{payment:true});
+            console.log('Order updated as paid:', orderInfo.receipt);
+
             await userModel.findByIdAndUpdate(userId,{cartData:{}})
             res.json({ success: true, message: "Payment Successful" })
+            console.log('Cart cleared for user:', userId);
+        }
         } else {
              res.json({ success: false, message: 'Payment Failed' });
         }
